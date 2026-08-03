@@ -32,35 +32,32 @@ VARIANCE_THRESHOLD = 1e-6      # drop near-constant sensor columns
 
 
 def load_raw_secom(data_path: Path, labels_path: Path) -> pd.DataFrame:
-    """Load SECOM sensor readings and labels, merge into a single dataframe.
-
-    Args:
-        data_path: Path to secom.data (whitespace-delimited sensor matrix).
-        labels_path: Path to secom_labels.data. Each row has 3 whitespace-
-            separated fields: label, date (DD/MM/YYYY), time (HH:MM:SS) --
-            e.g. "-1 19/07/2008 11:55:00".
-
-    Returns:
-        Merged dataframe with sensor columns, label, and timestamp.
-
-    Raises:
-        FileNotFoundError: If either input file is missing.
-    """
+    """Load SECOM sensor readings and labels, merge into a single dataframe."""
     if not data_path.exists() or not labels_path.exists():
         raise FileNotFoundError(
             f"Expected raw SECOM files at {data_path} and {labels_path}. "
             "Download from https://archive.ics.uci.edu/dataset/179/secom"
         )
 
+    # Load sensor data
     sensor_df = pd.read_csv(data_path, sep=r"\s+", header=None)
     sensor_df.columns = [f"Sensor_{i+1}" for i in range(sensor_df.shape[1])]
 
+    # Robust loading of labels (forces pandas to ignore weird quotes/spacing)
     labels_df = pd.read_csv(
-        labels_path, sep=r"\s+", header=None, names=["Label_Raw", "Date", "Time"]
+        labels_path, sep=r"\s+", header=None, engine="python", quoting=3
     )
-    labels_df["Timestamp"] = pd.to_datetime(
-        labels_df["Date"] + " " + labels_df["Time"], format="%d/%m/%Y %H:%M:%S"
-    )
+    
+    # Extract just the first 3 columns to avoid dimension errors
+    labels_df = labels_df.iloc[:, :3]
+    labels_df.columns = ["Label_Raw", "Date", "Time"]
+
+    # Combine date and time, stripping any stray quotes
+    combined_time = labels_df["Date"].astype(str).str.replace('"', '') + " " + labels_df["Time"].astype(str).str.replace('"', '')
+    
+    # Let pandas infer the datetime format to completely prevent NaT errors
+    labels_df["Timestamp"] = pd.to_datetime(combined_time, errors="raise")
+
     # Remap UCI encoding (-1 = pass, 1 = fail) -> (0 = Pass, 1 = Fail)
     labels_df["Label"] = labels_df["Label_Raw"].map({-1: 0, 1: 1})
 
@@ -70,15 +67,7 @@ def load_raw_secom(data_path: Path, labels_path: Path) -> pd.DataFrame:
 
 
 def drop_high_missing_columns(df: pd.DataFrame, threshold: float = MISSING_THRESHOLD) -> pd.DataFrame:
-    """Drop sensor columns whose missing-value fraction exceeds `threshold`.
-
-    Args:
-        df: Dataframe containing 'Timestamp', 'Label', and sensor columns.
-        threshold: Maximum allowed fraction of missing values per column.
-
-    Returns:
-        Dataframe with high-missing sensor columns removed.
-    """
+    """Drop sensor columns whose missing-value fraction exceeds `threshold`."""
     sensor_cols = df.columns.difference(["Timestamp", "Label"])
     missing_frac = df[sensor_cols].isna().mean()
     cols_to_drop = missing_frac[missing_frac > threshold].index.tolist()
@@ -87,29 +76,14 @@ def drop_high_missing_columns(df: pd.DataFrame, threshold: float = MISSING_THRES
 
 
 def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    """Median-impute remaining missing sensor values (robust to skew/outliers).
-
-    Args:
-        df: Dataframe containing sensor columns with possible NaNs.
-
-    Returns:
-        Dataframe with all sensor NaNs filled by their column median.
-    """
+    """Median-impute remaining missing sensor values (robust to skew/outliers)."""
     sensor_cols = df.columns.difference(["Timestamp", "Label"])
     df[sensor_cols] = df[sensor_cols].apply(lambda col: col.fillna(col.median()))
     return df
 
 
 def drop_near_zero_variance(df: pd.DataFrame, threshold: float = VARIANCE_THRESHOLD) -> pd.DataFrame:
-    """Remove sensors with near-zero variance (no discriminative signal).
-
-    Args:
-        df: Dataframe containing sensor columns.
-        threshold: Minimum variance a sensor must have to be kept.
-
-    Returns:
-        Dataframe with near-constant sensor columns removed.
-    """
+    """Remove sensors with near-zero variance (no discriminative signal)."""
     sensor_cols = df.columns.difference(["Timestamp", "Label"])
     selector = VarianceThreshold(threshold=threshold)
     selector.fit(df[sensor_cols])
@@ -120,14 +94,7 @@ def drop_near_zero_variance(df: pd.DataFrame, threshold: float = VARIANCE_THRESH
 
 
 def validate_schema(df: pd.DataFrame) -> None:
-    """Run sanity checks; raise AssertionError if the dataset looks malformed.
-
-    Args:
-        df: Cleaned dataframe to validate.
-
-    Raises:
-        AssertionError: If any validation check fails.
-    """
+    """Run sanity checks; raise AssertionError if the dataset looks malformed."""
     assert df["Label"].isin([0, 1]).all(), "Label column contains unexpected values."
     sensor_cols = df.columns.difference(["Timestamp", "Label"])
     assert df[sensor_cols].isna().sum().sum() == 0, "Unexpected remaining nulls after imputation."
@@ -136,14 +103,7 @@ def validate_schema(df: pd.DataFrame) -> None:
 
 
 def report_class_balance(df: pd.DataFrame) -> pd.Series:
-    """Log and return the pass/fail class distribution.
-
-    Args:
-        df: Cleaned dataframe containing a 'Label' column.
-
-    Returns:
-        Series with 'Pass' and 'Fail' proportions.
-    """
+    """Log and return the pass/fail class distribution."""
     balance = df["Label"].value_counts(normalize=True).rename({0: "Pass", 1: "Fail"})
     logger.info(
         "Class balance -> Pass: %.2f%% | Fail: %.2f%%",
@@ -154,16 +114,7 @@ def report_class_balance(df: pd.DataFrame) -> pd.Series:
 
 
 def clean_secom_pipeline(data_path: Path, labels_path: Path, output_path: Path) -> pd.DataFrame:
-    """End-to-end cleaning pipeline; writes cleaned CSV and returns the dataframe.
-
-    Args:
-        data_path: Path to secom.data.
-        labels_path: Path to secom_labels.data.
-        output_path: Where to save the cleaned CSV output.
-
-    Returns:
-        The cleaned dataframe.
-    """
+    """End-to-end cleaning pipeline; writes cleaned CSV and returns the dataframe."""
     df = load_raw_secom(data_path, labels_path)
     df = drop_high_missing_columns(df)
     df = impute_missing_values(df)
