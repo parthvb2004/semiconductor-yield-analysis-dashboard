@@ -56,21 +56,6 @@
    method for Phase 6 — the failure signal here is likely non-linear and sensor-specific rather
    than a broad structural difference visible in reduced dimensions.
 
-## Implications for Phase 6 (Feature Selection)
-
-- **Correlation filter candidates:** one sensor from each of {Sensor_163/162/298/25/297/24} and
-  {Sensor_160/22/161/295/296} should be dropped as redundant; keep Sensor_68 and Sensor_23
-  separately despite their correlation, since the negative relationship (rather than
-  redundancy) may itself carry signal.
-- **Expected to rank highly in Random Forest importance:** Sensor_60, Sensor_104, Sensor_511,
-  Sensor_349, Sensor_432, Sensor_435 — this EDA-stage "quick check" ranking gives a benchmark
-  to sanity-check the Phase 6 output against. If these sensors *don't* show up near the top of
-  the Random Forest ranking, that's worth investigating (may indicate the simple standardized
-  mean-gap metric was misleading, or that Random Forest is picking up different, interaction-
-  based signal).
-- Given PCA showed no linear separation, prioritize the embedded/model-based stage (Random
-  Forest) over any linear filter method as the final ranking authority.
-
 ## Charts Referenced
 
 - `reports/figures/class_balance.png`
