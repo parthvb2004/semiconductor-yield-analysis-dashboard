@@ -1,0 +1,33 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Conda
+*.conda
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Data (raw data often too large/licensed to commit)
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Power BI backups
+*.pbix.bak
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+
+# Environment variables
+.env
