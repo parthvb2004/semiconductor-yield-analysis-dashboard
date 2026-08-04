@@ -34,6 +34,13 @@ MACHINE_TO_STEP = {
     **{m: "Litho" for m in MACHINES if m.startswith("LITHO")},
 }
 
+# A physical machine sits in one bay -- location must be a function of the
+# machine, not assigned independently per wafer row (that would make the
+# same machine appear in multiple locations, breaking Dim_Machine's grain).
+MACHINE_TO_LOCATION = {
+    m: LINE_LOCATIONS[i % len(LINE_LOCATIONS)] for i, m in enumerate(MACHINES)
+}
+
 SHIFT_HOURS = {
     "Day": set(range(6, 14)),
     "Swing": set(range(14, 22)),
@@ -69,7 +76,7 @@ def generate_metadata(df: pd.DataFrame, lot_size: int = 25) -> pd.DataFrame:
     process_steps = [MACHINE_TO_STEP[m] for m in machine_ids]
     operator_ids = rng.choice(OPERATORS, size=n)
     product_lines = rng.choice(PRODUCT_LINES, size=n, p=[0.35, 0.25, 0.25, 0.15])
-    line_locations = rng.choice(LINE_LOCATIONS, size=n)
+    line_locations = [MACHINE_TO_LOCATION[m] for m in machine_ids]
     shifts = df_sorted["Timestamp"].dt.hour.apply(_assign_shift)
 
     # Simulate cycle time: log-normal (most runs short, some long), clipped to a realistic range
